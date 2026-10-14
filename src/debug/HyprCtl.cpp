@@ -33,7 +33,6 @@ using namespace Hyprutils::OS;
 #include <aquamarine/input/Input.hpp>
 
 #include "../config/shared/complex/ComplexDataTypes.hpp"
-#include "../config/legacy/ConfigManager.hpp"
 #include "../config/lua/ConfigManager.hpp"
 #include "../config/ConfigValue.hpp"
 #include "../config/shared/parserUtils/ParserUtils.hpp"
@@ -45,7 +44,6 @@ using namespace Hyprutils::OS;
 #include "../config/supplementary/jeremy/Jeremy.hpp"
 #include "../config/values/ConfigValues.hpp"
 #include "../managers/CursorManager.hpp"
-#include "../errorOverlay/Overlay.hpp"
 #include "../devices/IPointer.hpp"
 #include "../devices/IKeyboard.hpp"
 #include "../devices/ITouch.hpp"
@@ -68,9 +66,7 @@ using namespace Hyprutils::OS;
 #include "../Compositor.hpp"
 #include "../managers/input/InputManager.hpp"
 #include "../managers/XWaylandManager.hpp"
-#include "../plugins/PluginSystem.hpp"
 #include "../managers/animation/AnimationManager.hpp"
-#include "../notification/NotificationOverlay.hpp"
 #include "../render/Renderer.hpp"
 #include "../render/OpenGL.hpp"
 #include "../layout/space/Space.hpp"
@@ -1140,106 +1136,6 @@ static std::string dispatchRequest(eHyprCtlOutputFormat format, std::string in) 
     return res.success ? "ok" : res.error;
 }
 
-static std::string dispatchKeyword(eHyprCtlOutputFormat format, std::string in) {
-
-    if (Config::mgr()->type() != Config::CONFIG_LEGACY)
-        return "keyword can't work with non-legacy parsers. Use eval.";
-
-    WP<Config::Legacy::CConfigManager> mgr = dynamicPointerCast<Config::Legacy::CConfigManager>(WP<Config::IConfigManager>(Config::mgr()));
-
-    // Find the first space to strip the keyword keyword
-    auto const firstSpacePos = in.find_first_of(' ');
-    if (firstSpacePos == std::string::npos) // Handle the case where there's no space found (invalid input)
-        return "Invalid input: no space found";
-
-    // Strip the keyword
-    in = in.substr(firstSpacePos + 1);
-
-    // Find the next space for the COMMAND and VALUE
-    auto const secondSpacePos = in.find_first_of(' ');
-    if (secondSpacePos == std::string::npos) // Handle the case where there's no second space (invalid input)
-        return "Invalid input: command and value not properly formatted";
-
-    // Extract COMMAND and VALUE
-    const auto COMMAND = in.substr(0, secondSpacePos);
-    const auto VALUE   = in.substr(secondSpacePos + 1);
-
-    // If COMMAND is empty, handle accordingly
-    if (COMMAND.empty())
-        return "Invalid input: command is empty";
-
-    g_pHyprCtl->m_currentRequestParams.isDynamicKeyword = true;
-
-    std::string retval = mgr->parseKeyword(COMMAND, VALUE);
-
-    g_pHyprCtl->m_currentRequestParams.isDynamicKeyword = false;
-
-    if (COMMAND == "source") {
-        Config::monitorRuleMgr()->scheduleReload();
-        g_pEventLoopManager->doLater([mgr] { mgr->reloadRules(); });
-    }
-
-    // if we are executing a dynamic source we have to reload everything, so every if will have a check for source.
-    if (COMMAND.contains("monitor"))
-        g_pEventLoopManager->doLater([] { Config::monitorRuleMgr()->scheduleReload(); });
-
-    if (COMMAND.contains("input") || COMMAND.contains("device") || COMMAND == "source") {
-        g_pInputManager->setKeyboardLayout();     // update kb layout
-        g_pInputManager->setPointerConfigs();     // update mouse cfgs
-        g_pInputManager->setTouchDeviceConfigs(); // update touch device cfgs
-        g_pInputManager->setTabletConfigs();      // update tablets
-    }
-
-    if (COMMAND.contains("general:layout") || (COMMAND.contains("workspace") && VALUE.contains("layout:")))
-        Layout::Supplementary::algoMatcher()->updateWorkspaceLayouts();
-
-    if (COMMAND.contains("decoration:screen_shader") || COMMAND == "source")
-        g_pHyprRenderer->m_reloadScreenShader = true;
-
-    if (COMMAND.contains("blur") || COMMAND == "source") {
-        for (auto const& m : State::monitorState()->monitors()) {
-            if (m)
-                m->m_blurFBDirty = true;
-        }
-    }
-
-    if (COMMAND.contains("misc:disable_autoreload"))
-        Config::watcher()->update();
-
-    // decorations will probably need a repaint
-    if (COMMAND.contains("decoration:") || COMMAND.contains("border") || COMMAND == "workspace" || COMMAND.contains("zoom_factor") || COMMAND == "source") {
-        static auto PZOOMFACTOR = CConfigValue<Config::FLOAT>("cursor:zoom_factor");
-        for (auto const& m : State::monitorState()->monitors()) {
-            *(m->m_cursorZoom) = *PZOOMFACTOR;
-            g_pHyprRenderer->damageMonitor(m);
-            if (m->m_activeWorkspace)
-                m->m_activeWorkspace->m_space->recalculate();
-        }
-    }
-
-    if (COMMAND.contains("windowrule ") || COMMAND.contains("windowrule["))
-        mgr->reloadRules();
-
-    if (COMMAND.contains("layerrule") || COMMAND.contains("layerrule[")) {
-        mgr->reloadRules();
-        // Damage all monitors to redraw static layers.
-        for (auto const& m : State::monitorState()->monitors()) {
-            g_pHyprRenderer->damageMonitor(m);
-        }
-    }
-
-    if (COMMAND.contains("workspace"))
-        State::workspacePlacementController()->ensurePersistentWorkspacesPresent(
-            nullptr, [](PHLWORKSPACE ws, PHLMONITOR mon, bool noWarp) { g_pCompositor->moveWorkspaceToMonitor(ws, mon, noWarp); });
-
-    Log::logger->log(Log::DEBUG, "Hyprctl: keyword {} : {}", COMMAND, VALUE);
-
-    if (retval.empty())
-        return "ok";
-
-    return retval;
-}
-
 static std::string reloadRequest(eHyprCtlOutputFormat format, std::string request) {
 
     if (request.ends_with("full-reset")) {
@@ -1420,7 +1316,6 @@ static std::string dispatchSeterror(eHyprCtlOutputFormat format, std::string req
     std::string errorMessage = "";
 
     if (vars.size() < 3) {
-        ErrorOverlay::overlay()->destroy();
 
         if (vars.size() == 2 && !vars[1].contains("dis"))
             return "var 1 not color or disable";
@@ -1429,16 +1324,6 @@ static std::string dispatchSeterror(eHyprCtlOutputFormat format, std::string req
     }
 
     const CHyprColor COLOR = Config::ParserUtils::parseColor(vars[1]).value_or(0);
-
-    for (size_t i = 2; i < vars.size(); ++i)
-        errorMessage += vars[i] + ' ';
-
-    if (errorMessage.empty()) {
-        ErrorOverlay::overlay()->destroy();
-    } else {
-        errorMessage.pop_back(); // pop last space
-        ErrorOverlay::overlay()->queueCreate(errorMessage, COLOR);
-    }
 
     return "ok";
 }
@@ -1795,83 +1680,6 @@ static std::string dispatchOutput(eHyprCtlOutputFormat format, std::string reque
     return "ok";
 }
 
-static std::string dispatchPlugin(eHyprCtlOutputFormat format, std::string request) {
-    CVarList vars(request, 0, ' ');
-
-    if (vars.size() < 2)
-        return "not enough args";
-
-    const auto OPERATION = vars[1];
-    const auto PATH      = vars[2];
-
-    if (OPERATION == "load") {
-        if (vars.size() < 3)
-            return "not enough args";
-
-        g_pHyprCtl->m_currentRequestParams.pendingPromise = CPromise<std::string>::make([PATH](SP<CPromiseResolver<std::string>> resolver) {
-            g_pPluginSystem->loadPlugin(PATH)->then([resolver, PATH](SP<CPromiseResult<CPlugin*>> result) {
-                if (result->hasError()) {
-                    resolver->reject(result->error());
-                    return;
-                }
-
-                resolver->resolve("ok");
-            });
-        });
-
-        return "ok";
-    } else if (OPERATION == "unload") {
-        if (vars.size() < 3)
-            return "not enough args";
-
-        const auto PLUGIN = g_pPluginSystem->getPluginByPath(PATH);
-
-        if (!PLUGIN)
-            return "plugin not loaded";
-
-        g_pPluginSystem->unloadPlugin(PLUGIN);
-    } else if (OPERATION == "list") {
-        const auto  PLUGINS = g_pPluginSystem->getAllPlugins();
-        std::string result  = "";
-
-        if (format == eHyprCtlOutputFormat::FORMAT_JSON) {
-            result += "[";
-
-            if (PLUGINS.empty())
-                return "[]";
-
-            for (auto const& p : PLUGINS) {
-                result += std::format(
-                    R"#(
-{{
-    "name": "{}",
-    "author": "{}",
-    "handle": "{:x}",
-    "version": "{}",
-    "description": "{}"
-}},)#",
-                    escapeJSONStrings(p->m_name), escapeJSONStrings(p->m_author), rc<uintptr_t>(p->m_handle), escapeJSONStrings(p->m_version), escapeJSONStrings(p->m_description));
-            }
-            trimTrailingComma(result);
-            result += "]";
-        } else {
-            if (PLUGINS.empty())
-                return "no plugins loaded";
-
-            for (auto const& p : PLUGINS) {
-                result += std::format("\nPlugin {} by {}:\n\tHandle: {:x}\n\tVersion: {}\n\tDescription: {}\n", p->m_name, p->m_author, rc<uintptr_t>(p->m_handle), p->m_version,
-                                      p->m_description);
-            }
-        }
-
-        return result;
-    } else {
-        return "unknown opt";
-    }
-
-    return "ok";
-}
-
 static std::string dispatchNotify(eHyprCtlOutputFormat format, std::string request) {
     CVarList vars(request, 0, ' ');
 
@@ -1922,7 +1730,6 @@ static std::string dispatchNotify(eHyprCtlOutputFormat format, std::string reque
 
     const auto MESSAGE = vars.join(" ", msgidx);
 
-    Notification::overlay()->addNotification(MESSAGE, color, time, sc<eIcons>(icon), fontsize);
 
     return "ok";
 }
@@ -1942,7 +1749,6 @@ static std::string dispatchDismissNotify(eHyprCtlOutputFormat format, std::strin
         } catch (std::exception& e) { return "invalid arg 1"; }
     }
 
-    Notification::overlay()->dismissNotifications(amount);
 
     return "ok";
 }
@@ -2009,7 +1815,6 @@ CHyprCtl::CHyprCtl() {
     registerCommand(SHyprCtlCommand{.name = "reloadshaders", .exact = false, .fn = reloadShaders});
     registerCommand(SHyprCtlCommand{"monitors", false, monitorsRequest});
     registerCommand(SHyprCtlCommand{"reload", false, reloadRequest});
-    registerCommand(SHyprCtlCommand{"plugin", false, dispatchPlugin});
     registerCommand(SHyprCtlCommand{"notify", false, dispatchNotify});
     registerCommand(SHyprCtlCommand{"dismissnotify", false, dispatchDismissNotify});
     registerCommand(SHyprCtlCommand{"getprop", false, dispatchGetProp});
@@ -2017,7 +1822,6 @@ CHyprCtl::CHyprCtl() {
     registerCommand(SHyprCtlCommand{"switchxkblayout", false, switchXKBLayoutRequest});
     registerCommand(SHyprCtlCommand{"output", false, dispatchOutput});
     registerCommand(SHyprCtlCommand{"dispatch", false, dispatchRequest});
-    registerCommand(SHyprCtlCommand{"keyword", false, dispatchKeyword});
     registerCommand(SHyprCtlCommand{"setcursor", false, dispatchSetCursor});
     registerCommand(SHyprCtlCommand{"getoption", false, dispatchGetOption});
     registerCommand(SHyprCtlCommand{"decorations", false, decorationRequest});

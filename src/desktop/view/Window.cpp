@@ -36,7 +36,6 @@
 #include "../../state/WorkspaceState.hpp"
 #include "../../managers/TokenManager.hpp"
 #include "../../managers/animation/AnimationManager.hpp"
-#include "../../managers/ANRManager.hpp"
 #include "../../managers/eventLoop/EventLoopManager.hpp"
 #include "../../managers/eventLoop/EventLoopTimer.hpp"
 #include "../../protocols/XDGShell.hpp"
@@ -1722,10 +1721,6 @@ void CWindow::deactivateGroupMembers() {
     }
 }
 
-bool CWindow::isNotResponding() {
-    return g_pANRManager->isNotResponding(m_self.lock());
-}
-
 std::optional<std::string> CWindow::xdgTag() {
     if (!m_xdgSurface || !m_xdgSurface->m_toplevel)
         return std::nullopt;
@@ -1759,10 +1754,6 @@ PHLWINDOW CWindow::parent() {
         return nullptr;
 
     return m_xdgSurface->m_toplevel->m_parent->m_window.lock();
-}
-
-bool CWindow::priorityFocus() {
-    return !m_isX11 && CAsyncDialogBox::isPriorityDialogBox(getPID());
 }
 
 SP<CWLSurfaceResource> CWindow::getSolitaryResource() {
@@ -2197,11 +2188,6 @@ void CWindow::mapWindow() {
         m_ruleApplicator->recheckStaticRules();
         setStaticProps();
     }
-
-    // make it uncloseable if it's a Hyprland dialog
-    // TODO: make some closeable?
-    if (CAsyncDialogBox::isAsyncDialogBox(getPID()))
-        m_closeableSince = Time::steadyNow() + std::chrono::years(10 /* Should be enough, no? */);
 
     // disallow tiled pinned
     if (m_pinned && !m_isFloating)

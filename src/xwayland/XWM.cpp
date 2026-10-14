@@ -17,7 +17,6 @@
 #include "../protocols/core/Seat.hpp"
 #include "../managers/eventLoop/EventLoopManager.hpp"
 #include "../managers/SeatManager.hpp"
-#include "../managers/ANRManager.hpp"
 #include "../helpers/env/Env.hpp"
 #include "../protocols/XWaylandShell.hpp"
 #include "../protocols/core/Compositor.hpp"
@@ -372,7 +371,6 @@ void CXWM::handleClientMessage(xcb_client_message_event_t* e) {
 
     if (e->type == HYPRATOMS["WM_PROTOCOLS"]) {
         if (e->data.data32[1] == XSURF->m_lastPingSeq && e->data.data32[0] == HYPRATOMS["_NET_WM_PING"]) {
-            g_pANRManager->onResponse(XSURF);
             return;
         }
     } else if (e->type == HYPRATOMS["WL_SURFACE_ID"]) {

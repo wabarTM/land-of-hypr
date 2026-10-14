@@ -75,13 +75,9 @@ namespace Config::Lua {
         virtual std::string                      currentConfigPath() override;
         virtual const std::vector<std::string>&  getConfigPaths() override;
 
-        virtual std::expected<void, std::string> generateDefaultConfig(const std::filesystem::path&, bool safeMode) override;
 
-        virtual void                             handlePluginLoads() override;
         virtual bool                             configVerifPassed() override;
 
-        virtual std::expected<void, std::string> registerPluginValue(void* handle, SP<Config::Values::IValue> value) override;
-        virtual void                             onPluginUnload(void* handle) override;
 
         int                                      invokePluginLuaFunctionByID(uint64_t id, lua_State* L);
 

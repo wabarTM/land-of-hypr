@@ -3,7 +3,6 @@
 #include <algorithm>
 #include "../Compositor.hpp"
 #include "../managers/SeatManager.hpp"
-#include "../managers/ANRManager.hpp"
 #include "../managers/eventLoop/EventLoopManager.hpp"
 #include "../output/Monitor.hpp"
 #include "core/Seat.hpp"
@@ -796,7 +795,6 @@ CXDGWMBase::CXDGWMBase(SP<CXdgWmBase> resource_) : m_resource(resource_) {
     });
 
     m_resource->setPong([this](CXdgWmBase* r, uint32_t serial) {
-        g_pANRManager->onResponse(m_self.lock());
         m_events.pong.emit();
     });
 }

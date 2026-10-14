@@ -8,7 +8,6 @@
 #include <filesystem>
 #include "../../helpers/MiscFunctions.hpp"
 
-#include "../../plugins/PluginSystem.hpp"
 #include "SignalSafe.hpp"
 
 #if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__)
@@ -108,11 +107,11 @@ void CrashReporter::createAndSaveCrash(int sig) {
     finalCrashReport += '(';
     finalCrashReport += SignalSafe::strsignal(sig);
     finalCrashReport += ")\nVersion: ";
-    finalCrashReport += GIT_COMMIT_HASH;
+    finalCrashReport += 1;
     finalCrashReport += "\nTag: ";
-    finalCrashReport += GIT_TAG;
+    finalCrashReport += 2;
     finalCrashReport += "\nDate: ";
-    finalCrashReport += GIT_COMMIT_DATE;
+    finalCrashReport += 3;
     finalCrashReport += "\nFlags:\n";
 #if ISDEBUG
     finalCrashReport += "debug\n";
@@ -121,27 +120,6 @@ void CrashReporter::createAndSaveCrash(int sig) {
     finalCrashReport += "no xwayland\n";
 #endif
     finalCrashReport += "\n";
-
-    if (g_pPluginSystem && g_pPluginSystem->pluginCount() > 0) {
-        finalCrashReport += "Hyprland seems to be running with plugins. This crash might not be Hyprland's fault.\nPlugins:\n";
-
-        const size_t          count = g_pPluginSystem->pluginCount();
-        std::vector<CPlugin*> plugins(count);
-        g_pPluginSystem->sigGetPlugins(plugins.data(), count);
-
-        for (size_t i = 0; i < count; i++) {
-            auto p = plugins[i];
-            finalCrashReport += '\t';
-            finalCrashReport += p->m_name;
-            finalCrashReport += " (";
-            finalCrashReport += p->m_author;
-            finalCrashReport += ") ";
-            finalCrashReport += p->m_version;
-            finalCrashReport += '\n';
-        }
-
-        finalCrashReport += "\n\n";
-    }
 
     finalCrashReport += "System info:\n";
 

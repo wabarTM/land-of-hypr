@@ -136,7 +136,6 @@ class CCompositor {
     void                           createLockFile();
     void                           removeLockFile();
     void                           setMallocThreshold();
-    void                           openSafeModeBox();
 
     uint64_t                       m_hyprlandPID    = 0;
     wl_event_source*               m_critSigSource  = nullptr;

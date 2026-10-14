@@ -1,7 +1,6 @@
 #include "ScreenshareManager.hpp"
 #include "../PointerManager.hpp"
 #include "../input/InputManager.hpp"
-#include "../permissions/DynamicPermissionManager.hpp"
 #include "../../protocols/ColorManagement.hpp"
 #include "../../protocols/XDGShell.hpp"
 #include "../../Compositor.hpp"
@@ -148,16 +147,6 @@ void CScreenshareFrame::copy() {
     // tell client to send presented timestamp
     // TODO: is this right? this is right after we commit to aq, not when page flip happens..
     m_callback(RESULT_TIMESTAMP);
-
-    // store a snapshot before the permission popup so we don't break screenshots
-    const auto PERM = g_pDynamicPermissionManager->clientPermissionMode(m_session->m_client, PERMISSION_TYPE_SCREENCOPY);
-    if (PERM == PERMISSION_RULE_ALLOW_MODE_PENDING) {
-        if (!m_session->m_tempFB || !m_session->m_tempFB->isAllocated())
-            storeTempFB();
-
-        // don't copy a frame while allow is pending because screenshot tools will only take the first frame we give, which is empty
-        return;
-    }
 
     if (m_buffer->shm().success)
         m_failed = !copyShm();
@@ -354,22 +343,14 @@ void CScreenshareFrame::renderWindow() {
 }
 
 void CScreenshareFrame::render() {
-    const auto PERM = g_pDynamicPermissionManager->clientPermissionMode(m_session->m_client, PERMISSION_TYPE_SCREENCOPY);
 
     CRegion    frameRegion = {0, 0, g_pHyprRenderer->m_renderData.pMonitor->m_pixelSize.x, g_pHyprRenderer->m_renderData.pMonitor->m_pixelSize.y};
 
     g_pHyprRenderer->draw(CClearPassElement::SClearData{{0, 0, 0, 0}}, frameRegion);
 
-    if (PERM == PERMISSION_RULE_ALLOW_MODE_PENDING)
-        return;
 
     bool windowShareDenied = m_session->m_type == SHARE_WINDOW && m_session->m_window->m_ruleApplicator && m_session->m_window->m_ruleApplicator->noScreenShare().valueOrDefault();
     g_pHyprRenderer->startRenderPass();
-    if (PERM == PERMISSION_RULE_ALLOW_MODE_DENY || windowShareDenied) {
-        CBox texbox = CBox{m_bufferSize / 2.F, g_pHyprRenderer->m_screencopyDeniedTexture->m_size}.translate(-g_pHyprRenderer->m_screencopyDeniedTexture->m_size / 2.F);
-        g_pHyprRenderer->draw(CTexPassElement::SRenderData{.tex = g_pHyprRenderer->m_screencopyDeniedTexture, .box = texbox}, texbox);
-        return;
-    }
 
     if (m_session->m_tempFB && m_session->m_tempFB->isAllocated()) {
         CBox texbox = {{}, m_bufferSize};

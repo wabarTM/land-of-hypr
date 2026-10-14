@@ -7,7 +7,7 @@
 #include <algorithm>
 #include "../../config/ConfigValue.hpp"
 #include "../../config/shared/actions/ConfigActions.hpp"
-#include "../../config/legacy/ConfigManager.hpp"
+#include "../../config/lua/ConfigManager.hpp"
 #include "../../desktop/view/WLSurface.hpp"
 #include "../../desktop/state/FocusState.hpp"
 #include "../../protocols/CursorShape.hpp"
@@ -37,7 +37,6 @@
 #include "../../managers/KeybindManager.hpp"
 #include "../../render/Renderer.hpp"
 #include "../../managers/EventManager.hpp"
-#include "../../managers/permissions/DynamicPermissionManager.hpp"
 #include "../../state/MonitorState.hpp"
 
 #include "../../helpers/time/Time.hpp"
@@ -1191,32 +1190,6 @@ void CInputManager::applyConfigToKeyboard(SP<IKeyboard> pKeyboard) {
     pKeyboard->m_enabled           = ENABLED;
     pKeyboard->m_resolveBindsBySym = RESOLVEBINDSBYSYM;
     pKeyboard->m_allowBinds        = ALLOWBINDS;
-
-    const auto PERM = g_pDynamicPermissionManager->clientPermissionModeWithString(-1, pKeyboard->m_hlName, PERMISSION_TYPE_KEYBOARD);
-
-    if (PERM == PERMISSION_RULE_ALLOW_MODE_PENDING) {
-
-        // disallow while pending
-        pKeyboard->m_allowed = false;
-
-        const auto PROMISE = g_pDynamicPermissionManager->promiseFor(-1, pKeyboard->m_hlName, PERMISSION_TYPE_KEYBOARD);
-        if (!PROMISE)
-            Log::logger->log(Log::ERR, "BUG THIS: No promise for client permission for keyboard");
-        else {
-            PROMISE->then([k = WP<IKeyboard>{pKeyboard}](SP<CPromiseResult<eDynamicPermissionAllowMode>> r) {
-                if (r->hasError()) {
-                    Log::logger->log(Log::ERR, "BUG THIS: No permission returned for keyboard");
-                    return;
-                }
-
-                if (!k)
-                    return;
-
-                k->m_allowed = r->result() == PERMISSION_RULE_ALLOW_MODE_ALLOW;
-            });
-        }
-    } else
-        pKeyboard->m_allowed = PERM == PERMISSION_RULE_ALLOW_MODE_ALLOW;
 
     try {
         if (NUMLOCKON == pKeyboard->m_numlockOn && REPEATDELAY == pKeyboard->m_repeatDelay && REPEATRATE == pKeyboard->m_repeatRate && RULES == pKeyboard->m_currentRules.rules &&

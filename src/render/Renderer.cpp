@@ -6,7 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include "../config/ConfigValue.hpp"
-#include "../config/legacy/ConfigManager.hpp"
+#include "../config/lua/ConfigManager.hpp"
 #include "../managers/CursorManager.hpp"
 #include "../managers/PointerManager.hpp"
 #include "../managers/input/InputManager.hpp"
@@ -23,12 +23,8 @@
 #include "../protocols/core/Compositor.hpp"
 #include "../protocols/DRMSyncobj.hpp"
 #include "../protocols/LinuxDMABUF.hpp"
-#include "../errorOverlay/Overlay.hpp"
-#include "../debug/Overlay.hpp"
-#include "../notification/NotificationOverlay.hpp"
 #include "../layout/LayoutManager.hpp"
 #include "../layout/space/Space.hpp"
-#include "../i18n/Engine.hpp"
 #include "../desktop/DesktopTypes.hpp"
 #include "../event/EventBus.hpp"
 #include "../helpers/CursorShapes.hpp"
@@ -160,8 +156,6 @@ IHyprRenderer::IHyprRenderer() {
 
     static auto P3 = Event::bus()->m_events.monitor.focused.listen([&](PHLMONITOR mon) {
         g_pEventLoopManager->doLater([this]() {
-            if (!ErrorOverlay::overlay()->active())
-                return;
             for (auto& m : State::monitorState()->monitors()) {
                 arrangeLayersForMonitor(m->m_id);
             }
@@ -586,12 +580,6 @@ void IHyprRenderer::renderWindow(PHLWINDOW pWindow, PHLMONITOR pMonitor, const T
     if (ignorePosition) {
         renderdata.pos.x = pMonitor->m_position.x;
         renderdata.pos.y = pMonitor->m_position.y;
-    } else {
-        const bool ANR = pWindow->isNotResponding();
-        if (ANR && pWindow->m_notRespondingTint->goal() != 0.2F)
-            *pWindow->m_notRespondingTint = 0.2F;
-        else if (!ANR && pWindow->m_notRespondingTint->goal() != 0.F)
-            *pWindow->m_notRespondingTint = 0.F;
     }
 
     if (standalone)
@@ -1998,11 +1986,6 @@ void IHyprRenderer::renderMirrored() {
 void IHyprRenderer::renderMonitor(PHLMONITOR pMonitor, bool commit) {
     if (!pMonitor)
         return;
-    static std::chrono::high_resolution_clock::time_point renderStart        = std::chrono::high_resolution_clock::now();
-    static std::chrono::high_resolution_clock::time_point renderStartOverlay = std::chrono::high_resolution_clock::now();
-    static std::chrono::high_resolution_clock::time_point endRenderOverlay   = std::chrono::high_resolution_clock::now();
-
-    static auto                                           PDEBUGOVERLAY       = CConfigValue<Config::INTEGER>("debug:overlay");
     static auto                                           PDAMAGETRACKINGMODE = CConfigValue<Config::INTEGER>("debug:damage_tracking");
     static auto                                           PDAMAGEBLINK        = CConfigValue<Config::INTEGER>("debug:damage_blink");
     static auto                                           PSOLDAMAGE          = CConfigValue<Config::INTEGER>("debug:render_solitary_wo_damage");
@@ -2019,11 +2002,6 @@ void IHyprRenderer::renderMonitor(PHLMONITOR pMonitor, bool commit) {
 
     if (!*PDAMAGEBLINK)
         damageBlinkCleanup = 0;
-
-    if (*PDEBUGOVERLAY == 1) {
-        renderStart = std::chrono::high_resolution_clock::now();
-        Debug::overlay()->frameData(pMonitor);
-    }
 
     if (!g_pCompositor->m_sessionActive)
         return;
@@ -2153,18 +2131,6 @@ void IHyprRenderer::renderMonitor(PHLMONITOR pMonitor, bool commit) {
 
             renderLockscreen(pMonitor, NOW, renderBox);
 
-            if (pMonitor == Desktop::focusState()->monitor()) {
-                Notification::overlay()->draw(pMonitor);
-                ErrorOverlay::overlay()->draw();
-            }
-
-            // for drawing the debug overlay
-            if (!State::monitorState()->monitors().empty() && pMonitor == State::monitorState()->monitors().front() && *PDEBUGOVERLAY == 1) {
-                renderStartOverlay = std::chrono::high_resolution_clock::now();
-                Debug::overlay()->draw();
-                endRenderOverlay = std::chrono::high_resolution_clock::now();
-            }
-
             if (*PDAMAGEBLINK && damageBlinkCleanup == 0) {
                 CRectPassElement::SRectData data;
                 data.box   = {0, 0, pMonitor->m_transformedSize.x, pMonitor->m_transformedSize.y};
@@ -2241,17 +2207,6 @@ void IHyprRenderer::renderMonitor(PHLMONITOR pMonitor, bool commit) {
         pMonitor->scheduleFrame(Aquamarine::IOutput::AQ_SCHEDULE_RENDER_MONITOR);
 
     pMonitor->m_pendingFrame = false;
-
-    if (*PDEBUGOVERLAY == 1) {
-        const float durationUs = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - renderStart).count() / 1000.f;
-        Debug::overlay()->renderData(pMonitor, durationUs);
-
-        if (pMonitor == State::monitorState()->monitors().front()) {
-            const float noOverlayUs = durationUs - std::chrono::duration_cast<std::chrono::nanoseconds>(endRenderOverlay - renderStartOverlay).count() / 1000.f;
-            Debug::overlay()->renderDataNoOverlay(pMonitor, noOverlayUs);
-        } else
-            Debug::overlay()->renderDataNoOverlay(pMonitor, durationUs);
-    }
 }
 
 static const hdr_output_metadata NO_HDR_METADATA = {.hdmi_metadata_type1 = hdr_metadata_infoframe{.eotf = 0}};
@@ -2378,8 +2333,6 @@ void IHyprRenderer::handleFullscreenSettings(PHLMONITOR pMonitor) {
             Log::logger->log(Log::WARN, "Wide color gamut is enabled but the display is not in 10bit mode");
             static bool shown = false;
             if (!shown) {
-                Notification::overlay()->addNotification(I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_WIDE_COLOR_NOT_10B, {{"name", pMonitor->m_name}}), CHyprColor{}, 15000,
-                                                         ICON_WARNING);
                 shown = true;
             }
         }
@@ -2951,26 +2904,7 @@ bool IHyprRenderer::shouldRenderCursor() {
     return !m_cursorHidden && m_cursorHasSurface;
 }
 
-std::tuple<float, float, float> IHyprRenderer::getRenderTimes(PHLMONITOR pMonitor) {
-    const auto POVERLAY = &Debug::overlay()->m_monitorOverlays[pMonitor];
-
-    float      avgRenderTime = 0;
-    float      maxRenderTime = 0;
-    float      minRenderTime = 9999;
-    for (auto const& rt : POVERLAY->m_lastRenderTimes) {
-        maxRenderTime = std::max(rt, maxRenderTime);
-        minRenderTime = std::min(rt, minRenderTime);
-        avgRenderTime += rt;
-    }
-    avgRenderTime /= POVERLAY->m_lastRenderTimes.empty() ? 1 : POVERLAY->m_lastRenderTimes.size();
-
-    return std::make_tuple<>(avgRenderTime, maxRenderTime, minRenderTime);
-}
-
 static int handleCrashLoop(void* data) {
-
-    Notification::overlay()->addNotification("Hyprland will crash in " + std::to_string(10 - sc<int>(g_pHyprRenderer->m_crashingDistort * 2.f)) + "s.", CHyprColor(0), 5000,
-                                             ICON_INFO);
 
     g_pHyprRenderer->m_crashingDistort += 0.5f;
 
@@ -2983,7 +2917,6 @@ static int handleCrashLoop(void* data) {
 }
 
 void IHyprRenderer::initiateManualCrash() {
-    Notification::overlay()->addNotification("Manual crash initiated. Farewell...", CHyprColor(0), 5000, ICON_INFO);
 
     m_crashingLoop = wl_event_loop_add_timer(g_pCompositor->m_wlEventLoop, handleCrashLoop, nullptr);
     wl_event_source_timer_update(m_crashingLoop, 1000);

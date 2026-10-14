@@ -2,7 +2,7 @@
 #include "../Compositor.hpp"
 #include "../config/ConfigValue.hpp"
 #include "../config/shared/actions/ConfigActions.hpp"
-#include "../config/legacy/ConfigManager.hpp"
+#include "../config/lua/ConfigManager.hpp"
 #include "../protocols/PointerGestures.hpp"
 #include "../protocols/RelativePointer.hpp"
 #include "../protocols/FractionalScale.hpp"

@@ -98,10 +98,6 @@ enum eMultiKeyCase : uint8_t {
     MK_FULL_MATCH
 };
 
-namespace Config::Legacy {
-    class CConfigManager;
-}
-
 namespace Config::Lua {
     class CConfigManager;
 }
@@ -176,7 +172,6 @@ class CKeybindManager {
 
     friend class CCompositor;
     friend class CInputManager;
-    friend class Config::Legacy::CConfigManager;
     friend class Config::Lua::CConfigManager;
     friend class CWorkspace;
     friend class CPointerManager;

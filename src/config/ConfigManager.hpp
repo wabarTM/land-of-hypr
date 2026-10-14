@@ -62,12 +62,8 @@ namespace Config {
 
         virtual std::string                      getErrors() = 0;
 
-        virtual std::expected<void, std::string> generateDefaultConfig(const std::filesystem::path&, bool safeMode = false) = 0;
 
-        virtual void                             handlePluginLoads() = 0;
 
-        virtual std::expected<void, std::string> registerPluginValue(void* handle, SP<Config::Values::IValue> value) = 0;
-        virtual void                             onPluginUnload(void* handle)                                        = 0;
     };
 
     bool                initConfigManager();

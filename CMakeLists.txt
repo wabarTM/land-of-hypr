@@ -89,7 +89,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES DEBUG)
   add_compile_definitions(HYPRLAND_DEBUG)
   set(BUILD_TESTING ON)
 else()
-  add_compile_options(-O3)
+  add_compile_options(-O2)
   message(STATUS "Configuring Hyprland in Release with CMake")
   set(BUILD_TESTING OFF)
 endif()
@@ -115,9 +115,6 @@ add_compile_options(
   -Wno-clobbered
   -frtti
   -fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=)
-
-# disable lto as it may break plugins
-add_compile_options(-fno-lto)
 
 set(CMAKE_EXECUTABLE_ENABLE_EXPORTS TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -330,10 +327,6 @@ if(USE_TRACY)
     message(STATUS "Tracy GPU Profiling is turned on")
     add_compile_definitions(USE_TRACY_GPU)
   endif()
-endif()
-
-if(BUILT_WITH_NIX)
-  add_compile_definitions(BUILT_WITH_NIX)
 endif()
 
 check_include_file("execinfo.h" EXECINFOH)
@@ -595,10 +588,6 @@ protocolnew("staging/ext-background-effect" "ext-background-effect-v1" false)
 
 protocolwayland()
 
-# tools
-add_subdirectory(hyprctl)
-add_subdirectory(start)
-
 if(NO_HYPRPM)
   message(STATUS "hyprpm is disabled")
 else()
@@ -609,7 +598,7 @@ endif()
 # Set proper permissions for directories, otherwise they could end up 700
 set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
     OWNER_READ OWNER_WRITE OWNER_EXECUTE
-    GROUP_READ GROUP_EXECUTE
+    GROUP_READ ROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE)
 
 # binary and symlink
@@ -622,13 +611,6 @@ install(
         \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/hyprland\" \
         )")
 # session file
-configure_file(
-    ${CMAKE_SOURCE_DIR}/example/hyprland.desktop.in
-    ${CMAKE_SOURCE_DIR}/example/hyprland.desktop
-    @ONLY
-)
-install(FILES ${CMAKE_SOURCE_DIR}/example/hyprland.desktop
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/wayland-sessions)
 
 # allow Hyprland to find assets
 add_compile_definitions(DATAROOTDIR="${CMAKE_INSTALL_FULL_DATAROOTDIR}")
@@ -636,10 +618,6 @@ add_compile_definitions(DATAROOTDIR="${CMAKE_INSTALL_FULL_DATAROOTDIR}")
 # installable assets
 file(GLOB_RECURSE INSTALLABLE_ASSETS "assets/install/*")
 install(FILES ${INSTALLABLE_ASSETS}
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/hypr)
-
-# default lua config
-install(FILES ${CMAKE_SOURCE_DIR}/example/hyprland.lua
         DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/hypr)
 
 # LuaLS stubs
@@ -675,48 +653,3 @@ install(
   PATTERN "*.h"
   PATTERN "*.hpp"
   PATTERN "*.inc")
-
-if(BUILD_TESTING OR WITH_TESTS)
-  message(STATUS "Building tests")
-
-  # hyprtester
-  add_subdirectory(hyprtester)
-
-  # GTest
-  find_package(GTest CONFIG REQUIRED)
-  include(GoogleTest)
-  file(GLOB_RECURSE TESTFILES "tests/*.cpp")
-  add_executable(hyprland_gtests ${TESTFILES})
-  target_compile_options(hyprland_gtests PRIVATE --coverage)
-  target_link_options(hyprland_gtests PRIVATE --coverage)
-  target_include_directories(
-    hyprland_gtests
-    PUBLIC "./include"
-    PRIVATE "./src" "./src/include" "./protocols" "${CMAKE_BINARY_DIR}")
-
-  target_link_libraries(hyprland_gtests hyprland_lib GTest::gtest_main)
-
-  gtest_discover_tests(hyprland_gtests)
-
-  # Enable coverage in main hyprland lib
-  target_compile_options(hyprland_lib PRIVATE --coverage)
-  target_link_options(hyprland_lib PRIVATE --coverage)
-  target_link_libraries(hyprland_lib PUBLIC gcov)
-
-  # Enable coverage in hyprland exe
-  target_compile_options(Hyprland PRIVATE --coverage)
-  target_link_options(Hyprland PRIVATE --coverage)
-  target_link_libraries(Hyprland gcov)
-endif()
-
-if(BUILD_TESTING)
-  message(STATUS "Testing is enabled")
-
-  enable_testing()
-  add_custom_target(tests)
-
-  add_dependencies(tests hyprland_gtests)
-
-else()
-  message(STATUS "Testing is disabled")
-endif()

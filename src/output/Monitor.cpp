@@ -28,11 +28,9 @@
 #include "../managers/animation/AnimationManager.hpp"
 #include "../managers/animation/DesktopAnimationManager.hpp"
 #include "../managers/input/InputManager.hpp"
-#include "../errorOverlay/Overlay.hpp"
 #include "../layout/LayoutManager.hpp"
 #include "../layout/space/Space.hpp"
 #include "../layout/algorithm/Algorithm.hpp"
-#include "../i18n/Engine.hpp"
 #include "../helpers/cm/ColorManagement.hpp"
 #include "../state/MonitorState.hpp"
 #include "../state/MonitorLayoutController.hpp"
@@ -46,7 +44,6 @@
 #include "MonitorFrameScheduler.hpp"
 #include <aquamarine/output/Output.hpp>
 #include "debug/log/Logger.hpp"
-#include "notification/NotificationOverlay.hpp"
 #include "MonitorFrameScheduler.hpp"
 #include <hyprutils/memory/UniquePtr.hpp>
 #include <hyprutils/string/String.hpp>
@@ -666,12 +663,10 @@ bool CMonitor::applyMonitorRuleSoft(Config::CMonitorRule&& pMonitorRule) {
         auto image = NColorManagement::SImageDescription::fromICC(m_activeMonitorRule.m_iccFile);
         if (!image) {
             Log::logger->log(Log::ERR, "icc for {} ({}) failed: {}", m_name, m_activeMonitorRule.m_iccFile, image.error());
-            ErrorOverlay::overlay()->queueError(std::format("failed to apply icc {} to {}: {}", m_activeMonitorRule.m_iccFile, m_name, image.error()));
         } else {
             m_imageDescription = CImageDescription::from(*image);
             if (!m_imageDescription) {
                 Log::logger->log(Log::ERR, "icc for {} ({}) failed 2: {}", m_name, m_activeMonitorRule.m_iccFile, image.error());
-                ErrorOverlay::overlay()->queueError(std::format("failed to apply icc {} to {}: {}", m_activeMonitorRule.m_iccFile, m_name, image.error()));
                 m_imageDescription = CImageDescription::from(SImageDescription{});
             }
         }
@@ -925,10 +920,6 @@ bool CMonitor::applyMonitorRule(Config::CMonitorRule&& pMonitorRule) {
             if (!m_state.test())
                 continue;
 
-            auto errorMessage = I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_MONITOR_MODE_FAIL,
-                                                             {{"name", m_name}, {"mode", std::format("{:X0}@{:.2f}Hz", mode->pixelSize, mode->refreshRate / 1000.f)}});
-            Log::logger->log(Log::WARN, errorMessage);
-            Notification::overlay()->addNotification(errorMessage, CHyprColor(0xff0000ff), 5000, ICON_WARNING);
 
             m_refreshRate   = mode->refreshRate / 1000.f;
             m_size          = mode->pixelSize;
@@ -1032,7 +1023,6 @@ bool CMonitor::applyMonitorRule(Config::CMonitorRule&& pMonitorRule) {
                     m_scale = std::round(scaleZero);
                 else {
                     Log::logger->log(Log::ERR, "Invalid scale passed to monitor, {} failed to find a clean divisor", m_scale);
-                    ErrorOverlay::overlay()->queueError("Invalid scale passed to monitor " + m_name + ", failed to find a clean divisor");
                     m_scale = getDefaultScale();
                 }
             } else {
@@ -1040,10 +1030,6 @@ bool CMonitor::applyMonitorRule(Config::CMonitorRule&& pMonitorRule) {
                     Log::logger->log(Log::ERR, "Invalid scale passed to monitor, {} found suggestion {}", m_scale, searchScale);
                     static auto PDISABLENOTIFICATION = CConfigValue<Config::INTEGER>("misc:disable_scale_notification");
                     if (!*PDISABLENOTIFICATION) {
-                        Notification::overlay()->addNotification(
-                            I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_MONITOR_AUTO_SCALE,
-                                                         {{"name", m_name}, {"scale", std::format("{:.2f}", m_scale)}, {"fixed_scale", std::format("{:.2f}", searchScale)}}),
-                            CHyprColor(1.0, 0.0, 0.0, 1.0), 5000, ICON_WARNING);
                     }
                 }
                 m_scale = searchScale;
@@ -1786,18 +1772,6 @@ uint32_t CMonitor::isSolitaryBlocked(bool full) {
 
     if (m_activeSpecialWorkspace) {
         reasons |= SC_SPECIAL;
-        if (!full)
-            return reasons;
-    }
-
-    if (Notification::overlay()->hasAny()) {
-        reasons |= SC_NOTIFICATION;
-        if (!full)
-            return reasons;
-    }
-
-    if (ErrorOverlay::overlay()->active() && Desktop::focusState()->monitor() == m_self) {
-        reasons |= SC_ERRORBAR;
         if (!full)
             return reasons;
     }

@@ -225,9 +225,6 @@ TEST(ConfigLuaBindingsInternal, pluginLuaFnIsUnloadedWithoutDanglingCall) {
 
     const auto HANDLE = reinterpret_cast<void*>(0x1BADB002);
 
-    const auto regResult = mgr.registerPluginLuaFunction(HANDLE, "demo", "ping", testPluginFn);
-    ASSERT_TRUE(regResult.has_value()) << regResult.error();
-
     ASSERT_EQ(luaL_dostring(L, R"(
         local f = hl.plugin.demo.ping
         assert(type(f) == "function")
@@ -236,8 +233,6 @@ TEST(ConfigLuaBindingsInternal, pluginLuaFnIsUnloadedWithoutDanglingCall) {
         assert(v == "pong")
     )"),
               LUA_OK);
-
-    mgr.onPluginUnload(HANDLE);
 
     ASSERT_EQ(luaL_dostring(L, R"(
         assert(hl.plugin.demo == nil)

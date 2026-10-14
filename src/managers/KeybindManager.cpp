@@ -1,13 +1,11 @@
 #include "../config/ConfigValue.hpp"
 #include "../config/ConfigManager.hpp"
-#include "../config/legacy/DispatcherTranslator.hpp"
 #include "../config/shared/actions/ConfigActions.hpp"
 #include "../devices/IKeyboard.hpp"
 #include "../managers/SeatManager.hpp"
 #include "../protocols/ShortcutsInhibit.hpp"
 #include "../protocols/Hotkey.hpp"
 #include "../protocols/core/DataDevice.hpp"
-#include "../errorOverlay/Overlay.hpp"
 #include "KeybindManager.hpp"
 #include "PointerManager.hpp"
 #include "Compositor.hpp"
@@ -36,80 +34,6 @@ using namespace Hyprutils::String;
 #endif
 
 CKeybindManager::CKeybindManager() {
-    // initialize all dispatchers
-    // populate m_dispatchers from the legacy translator
-    for (const auto& name : {"exec",
-                             "execr",
-                             "killactive",
-                             "forcekillactive",
-                             "closewindow",
-                             "killwindow",
-                             "signal",
-                             "signalwindow",
-                             "togglefloating",
-                             "setfloating",
-                             "settiled",
-                             "workspace",
-                             "renameworkspace",
-                             "fullscreen",
-                             "fullscreenstate",
-                             "movetoworkspace",
-                             "movetoworkspacesilent",
-                             "pseudo",
-                             "movefocus",
-                             "movewindow",
-                             "swapwindow",
-                             "centerwindow",
-                             "togglegroup",
-                             "changegroupactive",
-                             "movegroupwindow",
-                             "focusmonitor",
-                             "movecursortocorner",
-                             "movecursor",
-                             "workspaceopt",
-                             "exit",
-                             "movecurrentworkspacetomonitor",
-                             "focusworkspaceoncurrentmonitor",
-                             "moveworkspacetomonitor",
-                             "togglespecialworkspace",
-                             "forcerendererreload",
-                             "resizeactive",
-                             "moveactive",
-                             "cyclenext",
-                             "focuswindowbyclass",
-                             "focuswindow",
-                             "tagwindow",
-                             "toggleswallow",
-                             "submap",
-                             "pass",
-                             "sendshortcut",
-                             "sendkeystate",
-                             "layoutmsg",
-                             "dpms",
-                             "movewindowpixel",
-                             "resizewindowpixel",
-                             "swapnext",
-                             "swapactiveworkspaces",
-                             "pin",
-                             "mouse",
-                             "bringactivetotop",
-                             "alterzorder",
-                             "focusurgentorlast",
-                             "focuscurrentorlast",
-                             "lockgroups",
-                             "lockactivegroup",
-                             "moveintogroup",
-                             "moveoutofgroup",
-                             "movewindoworgroup",
-                             "moveintoorcreategroup",
-                             "setignoregrouplock",
-                             "denywindowfromgroup",
-                             "event",
-                             "global",
-                             "setprop",
-                             "forceidle"}) {
-        m_dispatchers[name] = [n = std::string(name)](std::string args) -> SDispatchResult { return Config::Legacy::translator()->run(n, args); };
-    }
 
     m_scrollTimer.reset();
 
@@ -315,9 +239,6 @@ void CKeybindManager::updateXKBTranslationState() {
         fclose(KEYMAPFILE);
 
     if (!PKEYMAP) {
-        ErrorOverlay::overlay()->queueCreate("[Runtime Error] Invalid keyboard layout passed. ( rules: " + RULES + ", model: " + MODEL + ", variant: " + VARIANT +
-                                                 ", options: " + OPTIONS + ", layout: " + LAYOUT + " )",
-                                             ErrorOverlay::Colors::ERROR);
 
         Log::logger->log(Log::ERR, "[XKBTranslationState] Keyboard layout {} with variant {} (rules: {}, model: {}, options: {}) couldn't have been loaded.", rules.layout,
                          rules.variant, rules.rules, rules.model, rules.options);

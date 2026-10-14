@@ -3,7 +3,6 @@
 #include "../objects/LuaEventSubscription.hpp"
 #include "../objects/LuaKeybind.hpp"
 #include "../objects/LuaLayerRule.hpp"
-#include "../objects/LuaNotification.hpp"
 #include "../objects/LuaTimer.hpp"
 #include "../objects/LuaWindowRule.hpp"
 
@@ -57,7 +56,6 @@ void Internal::registerBindingsImpl(lua_State* L, CConfigManager* mgr) {
     Objects::CLuaWindowRule{}.setup(L);
     Objects::CLuaLayerRule{}.setup(L);
     Objects::CLuaKeybind{}.setup(L);
-    Objects::CLuaNotification{}.setup(L);
 
     g_pKeybindManager->m_dispatchers["__lua"] = [L](std::string arg) -> SDispatchResult {
         int ref = std::stoi(arg);
@@ -89,7 +87,6 @@ void Internal::registerBindingsImpl(lua_State* L, CConfigManager* mgr) {
     Internal::registerLayoutBindings(L, mgr);
     Internal::registerQueryBindings(L);
     Internal::registerDispatcherBindings(L);
-    Internal::registerNotificationBindings(L);
 
     lua_setglobal(L, "hl");
 

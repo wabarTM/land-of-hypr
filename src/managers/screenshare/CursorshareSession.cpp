@@ -1,7 +1,6 @@
 #include "ScreenshareManager.hpp"
 #include "../PointerManager.hpp"
 #include "../../protocols/core/Seat.hpp"
-#include "../permissions/DynamicPermissionManager.hpp"
 #include "../../render/Renderer.hpp"
 #include "../../render/pass/ClearPassElement.hpp"
 #include "../../render/pass/TexPassElement.hpp"
@@ -113,8 +112,6 @@ eScreenshareError CCursorshareSession::share(PHLMONITOR monitor, SP<IHLBuffer> b
 }
 
 void CCursorshareSession::render() {
-    const auto  PERM = g_pDynamicPermissionManager->clientPermissionMode(m_client, PERMISSION_TYPE_CURSOR_POS);
-
     const auto& cursorImage = g_pPointerManager->currentCursorImage();
 
     // TODO: implement a monitor independent render mode to buffer that does this in CHyprRenderer::begin() or something like that
@@ -123,10 +120,7 @@ void CCursorshareSession::render() {
 
     bool overlaps = g_pPointerManager->getCursorBoxGlobal().overlaps(m_pendingFrame.sourceBoxCallback());
     g_pHyprRenderer->startRenderPass();
-    if (PERM != PERMISSION_RULE_ALLOW_MODE_ALLOW || !overlaps) {
-        // render black when not allowed
-        g_pHyprRenderer->draw(CClearPassElement::SClearData{Colors::BLACK});
-    } else if (!cursorImage.pBuffer || !cursorImage.surface || !cursorImage.bufferTex) {
+    if (!cursorImage.pBuffer || !cursorImage.surface || !cursorImage.bufferTex) {
         // render clear when cursor is probably hidden
         g_pHyprRenderer->draw(CClearPassElement::SClearData{{0, 0, 0, 0}});
     } else {

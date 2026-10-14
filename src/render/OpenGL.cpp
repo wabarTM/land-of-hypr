@@ -15,7 +15,7 @@
 #include "../helpers/CursorShapes.hpp"
 #include "../helpers/TransferFunction.hpp"
 #include "../config/ConfigValue.hpp"
-#include "../config/legacy/ConfigManager.hpp"
+#include "../config/lua/ConfigManager.hpp"
 #include "../managers/PointerManager.hpp"
 #include "../desktop/view/LayerSurface.hpp"
 #include "../desktop/state/FocusState.hpp"
@@ -29,12 +29,9 @@
 #include "../helpers/fs/FsUtils.hpp"
 #include "../helpers/env/Env.hpp"
 #include "../helpers/MainLoopExecutor.hpp"
-#include "../i18n/Engine.hpp"
 #include "../event/EventBus.hpp"
 #include "../managers/screenshare/ScreenshareManager.hpp"
-#include "../notification/NotificationOverlay.hpp"
 #include "../state/MonitorState.hpp"
-#include "errorOverlay/Overlay.hpp"
 #include "helpers/Color.hpp"
 #include "macros.hpp"
 #include "pass/TexPassElement.hpp"
@@ -926,17 +923,12 @@ void CHyprOpenGLImpl::applyScreenShader(const std::string& path) {
 
     std::error_code ec;
     if (!std::filesystem::is_regular_file(absPath, ec)) {
-        if (ec)
-            ErrorOverlay::overlay()->queueError("Screen shader parser: Failed to check screen shader path: " + ec.message());
-        else
-            ErrorOverlay::overlay()->queueError("Screen shader parser: Screen shader path is not a regular file");
-        return;
+        if (!ec) return;
     }
 
     std::ifstream infile(absPath);
 
     if (!infile.good()) {
-        ErrorOverlay::overlay()->queueError("Screen shader parser: Failed to open screen shader");
         return;
     }
 
@@ -963,9 +955,6 @@ void CHyprOpenGLImpl::applyScreenShader(const std::string& path) {
 
         // The screen shader uses the uniform
         // Since the screen shader could change every frame, damage tracking *needs* to be disabled
-        ErrorOverlay::overlay()->queueError(std::format("Screen shader: Screen shader uses uniform '{}', which requires debug:damage_tracking to be switched off.\n"
-                                                        "WARNING:(Disabling damage tracking will *massively* increase GPU utilization!",
-                                                        name));
     };
 
     // Allow glitch shader to use time uniform whighout damage tracking

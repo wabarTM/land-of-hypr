@@ -7,10 +7,8 @@
 #include "../config/ConfigValue.hpp"
 #include "../debug/log/Logger.hpp"
 #include "../event/EventBus.hpp"
-#include "../i18n/Engine.hpp"
 #include "../macros.hpp"
 #include "../managers/eventLoop/EventLoopManager.hpp"
-#include "../notification/NotificationOverlay.hpp"
 #include "../output/Monitor.hpp"
 #include "../protocols/XDGOutput.hpp"
 #include "../xwayland/XWayland.hpp"
@@ -43,8 +41,6 @@ void CMonitorLayoutController::checkOverlapsAndNotify() const {
     for (const auto& m : State::monitorState()->monitors()) {
         if (!monitorRegion.copy().intersect(m->logicalBox()).empty()) {
             Log::logger->log(Log::ERR, "Monitor {}: detected overlap with layout", m->m_name);
-            Notification::overlay()->addNotification(I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_INVALID_MONITOR_LAYOUT, {{"name", m->m_name}}), CHyprColor{}, 15000,
-                                                     ICON_WARNING);
 
             break;
         }

@@ -40,7 +40,6 @@
 #include "../../../managers/input/trackpad/gestures/SpecialWorkspaceGesture.hpp"
 #include "../../../managers/input/trackpad/gestures/WorkspaceSwipeGesture.hpp"
 #include "../../../managers/input/trackpad/gestures/ScrollMoveGesture.hpp"
-#include "../../../managers/permissions/DynamicPermissionManager.hpp"
 
 #include <hyprutils/utils/ScopeGuard.hpp>
 
@@ -547,72 +546,6 @@ static int hlPluginLoad(lua_State* L) {
         return Internal::configError(L, "hl.plugin.load: path must not be empty");
 
     mgr->m_registeredPlugins.emplace_back(path);
-    return 0;
-}
-
-static int hlPermission(lua_State* L) {
-    auto*       mgr = sc<CConfigManager*>(lua_touserdata(L, lua_upvalueindex(1)));
-
-    std::string binary;
-    std::string typeStr;
-    std::string modeStr;
-
-    if (lua_istable(L, 1)) {
-        auto b = Internal::tableOptStr(L, 1, "binary");
-        if (!b)
-            b = Internal::tableOptStr(L, 1, "target");
-        auto t = Internal::tableOptStr(L, 1, "type");
-        auto m = Internal::tableOptStr(L, 1, "mode");
-
-        if (!b || !t || !m)
-            return Internal::configError(L, "hl.permission: expected { binary, type, mode }");
-
-        binary  = *b;
-        typeStr = *t;
-        modeStr = *m;
-    } else {
-        auto b = Check::string(L, 1);
-        auto t = Check::string(L, 2);
-        auto m = Check::string(L, 3);
-
-        if (!b || !t || !m)
-            return Internal::configError(L, "hl.permission: expected binary, type, mode");
-
-        binary  = *b;
-        typeStr = *t;
-        modeStr = *m;
-    }
-
-    if (binary.empty())
-        return Internal::configError(L, "hl.permission: binary must not be empty");
-
-    eDynamicPermissionType      type = PERMISSION_TYPE_UNKNOWN;
-    eDynamicPermissionAllowMode mode = PERMISSION_RULE_ALLOW_MODE_UNKNOWN;
-
-    if (typeStr == "screencopy")
-        type = PERMISSION_TYPE_SCREENCOPY;
-    else if (typeStr == "cursorpos")
-        type = PERMISSION_TYPE_CURSOR_POS;
-    else if (typeStr == "plugin")
-        type = PERMISSION_TYPE_PLUGIN;
-    else if (typeStr == "keyboard" || typeStr == "keeb")
-        type = PERMISSION_TYPE_KEYBOARD;
-
-    if (modeStr == "ask")
-        mode = PERMISSION_RULE_ALLOW_MODE_ASK;
-    else if (modeStr == "allow")
-        mode = PERMISSION_RULE_ALLOW_MODE_ALLOW;
-    else if (modeStr == "deny")
-        mode = PERMISSION_RULE_ALLOW_MODE_DENY;
-
-    if (type == PERMISSION_TYPE_UNKNOWN)
-        return Internal::configError(L, "hl.permission: unknown permission type");
-    if (mode == PERMISSION_RULE_ALLOW_MODE_UNKNOWN)
-        return Internal::configError(L, "hl.permission: unknown permission allow mode");
-
-    if (mgr->isFirstLaunch() && g_pDynamicPermissionManager)
-        g_pDynamicPermissionManager->addConfigPermissionRule(binary, type, mode);
-
     return 0;
 }
 
@@ -1299,7 +1232,6 @@ void Internal::registerConfigRuleBindings(lua_State* L, CConfigManager* mgr) {
     Internal::setMgrFn(L, mgr, "layer_rule", hlLayerRule);
     Internal::setMgrFn(L, mgr, "workspace_rule", hlWorkspaceRule);
     Internal::setMgrFn(L, mgr, "env", hlEnv);
-    Internal::setMgrFn(L, mgr, "permission", hlPermission);
 
     lua_newtable(L);
     Internal::setMgrFn(L, mgr, "load", hlPluginLoad);

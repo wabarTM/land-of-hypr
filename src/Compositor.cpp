@@ -12,7 +12,6 @@
 #include "helpers/Splashes.hpp"
 #include "helpers/SystemInfo.hpp"
 #include "config/ConfigValue.hpp"
-#include "config/legacy/ConfigManager.hpp"
 #include "config/shared/inotify/ConfigWatcher.hpp"
 #include "config/shared/monitor/MonitorRuleManager.hpp"
 #include "managers/CursorManager.hpp"
@@ -21,9 +20,7 @@
 #include "managers/SeatManager.hpp"
 #include "managers/VersionKeeperManager.hpp"
 #include "managers/DonationNagManager.hpp"
-#include "managers/ANRManager.hpp"
 #include "managers/eventLoop/EventLoopManager.hpp"
-#include "managers/permissions/DynamicPermissionManager.hpp"
 #include "managers/screenshare/ScreenshareManager.hpp"
 #include "state/FallbackState.hpp"
 #include "state/MonitorPositionController.hpp"
@@ -42,9 +39,6 @@
 #include "debug/crash/CrashReporter.hpp"
 #include "render/GLRenderer.hpp"
 #include "render/ShaderLoader.hpp"
-#ifdef USES_SYSTEMD
-#include <helpers/SdDaemon.hpp> // for SdNotify
-#endif
 #include "helpers/fs/FsUtils.hpp"
 #include "helpers/env/Env.hpp"
 #include "protocols/FractionalScale.hpp"
@@ -75,14 +69,8 @@
 #include "managers/animation/DesktopAnimationManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/ProtocolManager.hpp"
-#include "managers/WelcomeManager.hpp"
 #include "render/AsyncResourceGatherer.hpp"
-#include "plugins/PluginSystem.hpp"
-#include "errorOverlay/Overlay.hpp"
-#include "notification/NotificationOverlay.hpp"
-#include "debug/Overlay.hpp"
 #include "output/MonitorFrameScheduler.hpp"
-#include "i18n/Engine.hpp"
 #include "layout/LayoutManager.hpp"
 #include "layout/target/WindowTarget.hpp"
 #include "event/EventBus.hpp"
@@ -213,7 +201,7 @@ CCompositor::CCompositor(bool onlyConfig) : m_onlyConfigVerification(onlyConfig)
     std::mt19937                    engine(dev());
     std::uniform_int_distribution<> distribution(0, INT32_MAX);
 
-    m_instanceSignature = std::format("{}_{}_{}", GIT_COMMIT_HASH, std::time(nullptr), distribution(engine));
+    m_instanceSignature = std::format("{}_{}_{}", 1, std::time(nullptr), distribution(engine));
 
     setenv("HYPRLAND_INSTANCE_SIGNATURE", m_instanceSignature.c_str(), true);
 
@@ -564,10 +552,6 @@ void CCompositor::cleanup() {
 
     cleanEnvironment();
 
-    // unload all remaining plugins while the compositor is
-    // still in a normal working state.
-    g_pPluginSystem->unloadAllPlugins();
-
     State::workspaceState()->clear();
     m_windows.clear();
 
@@ -584,12 +568,8 @@ void CCompositor::cleanup() {
     removeAllSignals();
 
     g_pInputManager.reset();
-    g_pDynamicPermissionManager.reset();
     g_pDecorationPositioner.reset();
     g_pCursorManager.reset();
-    g_pPluginSystem.reset();
-    Notification::overlay().reset();
-    Debug::overlay().reset();
     g_pEventManager.reset();
     g_pSessionLockManager.reset();
     g_pHyprRenderer.reset();
@@ -598,7 +578,6 @@ void CCompositor::cleanup() {
     Render::g_pShaderLoader.reset();
     Config::mgr().reset();
     g_layoutManager.reset();
-    ErrorOverlay::overlay().reset();
     g_pKeybindManager.reset();
     g_pXWaylandManager.reset();
     g_pPointerManager.reset();
@@ -607,8 +586,6 @@ void CCompositor::cleanup() {
     g_pEventLoopManager.reset();
     g_pVersionKeeperMgr.reset();
     g_pDonationNagManager.reset();
-    g_pWelcomeManager.reset();
-    g_pANRManager.reset();
     Config::watcher().reset();
     g_pAsyncResourceGatherer.reset();
 
@@ -634,9 +611,6 @@ void CCompositor::initManagers(eManagersInitStage stage) {
             Log::logger->log(Log::DEBUG, "Creating the AnimationManager!");
             g_pAnimationManager = makeUnique<CHyprAnimationManager>();
 
-            Log::logger->log(Log::DEBUG, "Creating the DynamicPermissionManager!");
-            g_pDynamicPermissionManager = makeUnique<CDynamicPermissionManager>();
-
             Log::logger->log(Log::DEBUG, "Creating the MonitorState!");
             State::monitorState();
 
@@ -646,9 +620,6 @@ void CCompositor::initManagers(eManagersInitStage stage) {
             Log::logger->log(Log::DEBUG, "Creating the ConfigManager!");
             if (!Config::initConfigManager())
                 exit(1);
-
-            Log::logger->log(Log::DEBUG, "Creating the Error Overlay!");
-            ErrorOverlay::overlay();
 
             Log::logger->log(Log::DEBUG, "Creating the LayoutManager!");
             g_layoutManager = makeUnique<Layout::CLayoutManager>();
@@ -704,16 +675,6 @@ void CCompositor::initManagers(eManagersInitStage stage) {
             Log::logger->log(Log::DEBUG, "Creating the XWaylandManager!");
             g_pXWaylandManager = makeUnique<CHyprXWaylandManager>();
 
-            Log::logger->log(Log::DEBUG, "Creating the Debug Overlay!");
-            Debug::overlay();
-
-            Log::logger->log(Log::DEBUG, "Creating the NotificationOverlay!");
-            Notification::overlay();
-
-            Log::logger->log(Log::DEBUG, "Creating the PluginSystem!");
-            g_pPluginSystem = makeUnique<CPluginSystem>();
-            Config::mgr()->handlePluginLoads();
-
             Log::logger->log(Log::DEBUG, "Creating the DecorationPositioner!");
             g_pDecorationPositioner = makeUnique<CDecorationPositioner>();
 
@@ -725,12 +686,6 @@ void CCompositor::initManagers(eManagersInitStage stage) {
 
             Log::logger->log(Log::DEBUG, "Creating the DonationNag!");
             g_pDonationNagManager = makeUnique<CDonationNagManager>();
-
-            Log::logger->log(Log::DEBUG, "Creating the WelcomeManager!");
-            g_pWelcomeManager = makeUnique<CWelcomeManager>();
-
-            Log::logger->log(Log::DEBUG, "Creating the ANRManager!");
-            g_pANRManager = makeUnique<CANRManager>();
 
             Log::logger->log(Log::DEBUG, "Starting XWayland");
             g_pXWayland = makeUnique<CXWayland>(g_pCompositor->m_wantsXwayland);
@@ -833,7 +788,7 @@ PHLWINDOW CCompositor::vectorToWindowUnified(const Vector2D& pos, uint16_t prope
     // pinned windows on top of floating regardless
     if (properties & Desktop::View::ALLOW_FLOATING) {
         for (auto const& w : m_windows | std::views::reverse) {
-            if (ONLY_PRIORITY && !w->priorityFocus())
+            if (ONLY_PRIORITY)
                 continue;
 
             if (w->m_isFloating && w->m_isMapped && w->acceptsInput() && !w->m_X11ShouldntFocus && w->m_pinned && !w->m_ruleApplicator->noFocus().valueOrDefault() &&
@@ -863,7 +818,7 @@ PHLWINDOW CCompositor::vectorToWindowUnified(const Vector2D& pos, uint16_t prope
                 if (!w->m_workspace)
                     continue;
 
-                if (ONLY_PRIORITY && !w->priorityFocus())
+                if (ONLY_PRIORITY)
                     continue;
 
                 const auto PWINDOWMONITOR = w->m_monitor.lock();
@@ -939,7 +894,7 @@ PHLWINDOW CCompositor::vectorToWindowUnified(const Vector2D& pos, uint16_t prope
 
         // for windows, we need to check their extensions too, first.
         for (auto const& w : m_windows) {
-            if (ONLY_PRIORITY && !w->priorityFocus())
+            if (ONLY_PRIORITY)
                 continue;
 
             if (special != w->onSpecialWorkspace())
@@ -956,7 +911,7 @@ PHLWINDOW CCompositor::vectorToWindowUnified(const Vector2D& pos, uint16_t prope
         }
 
         for (auto const& w : m_windows) {
-            if (ONLY_PRIORITY && !w->priorityFocus())
+            if (ONLY_PRIORITY)
                 continue;
 
             if (special != w->onSpecialWorkspace())
@@ -2263,70 +2218,9 @@ void CCompositor::performUserChecks() {
     if (!*PNOCHECKXDG) {
         const auto CURRENT_DESKTOP_ENV = getenv("XDG_CURRENT_DESKTOP");
         if (!CURRENT_DESKTOP_ENV || std::string{CURRENT_DESKTOP_ENV} != "Hyprland") {
-            Notification::overlay()->addNotification(
-                I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_EXTERNAL_XDG_DESKTOP, {{"value", CURRENT_DESKTOP_ENV ? CURRENT_DESKTOP_ENV : "unset"}}), CHyprColor{}, 15000,
-                ICON_WARNING);
         }
     }
 
-    if (!*PNOCHECKGUIUTILS) {
-        if (!NFsUtils::executableExistsInPath("hyprland-dialog"))
-            Notification::overlay()->addNotification(I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_NO_GUIUTILS), CHyprColor{}, 15000, ICON_WARNING);
-    }
-
-    if (g_pHyprRenderer->m_failedAssetsNo > 0) {
-        Notification::overlay()->addNotification(I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_FAILED_ASSETS, {{"count", std::to_string(g_pHyprRenderer->m_failedAssetsNo)}}),
-                                                 CHyprColor{1.0, 0.1, 0.1, 1.0}, 15000, ICON_ERROR);
-    }
-
-    if (!m_watchdogWriteFd.isValid() && !*PNOWATCHDOG)
-        Notification::overlay()->addNotification(I18n::i18nEngine()->localize(I18n::TXT_KEY_NOTIF_NO_WATCHDOG), CHyprColor{1.0, 0.1, 0.1, 1.0}, 15000, ICON_WARNING);
-
-    if (m_safeMode)
-        openSafeModeBox();
-}
-
-void CCompositor::openSafeModeBox() {
-    const auto OPT_LOAD = I18n::i18nEngine()->localize(I18n::TXT_KEY_SAFE_MODE_BUTTON_LOAD_CONFIG);
-    const auto OPT_OPEN = I18n::i18nEngine()->localize(I18n::TXT_KEY_SAFE_MODE_BUTTON_OPEN_CRASH_REPORT_DIR);
-    const auto OPT_OK   = I18n::i18nEngine()->localize(I18n::TXT_KEY_SAFE_MODE_BUTTON_UNDERSTOOD);
-
-    auto       box = CAsyncDialogBox::create(I18n::i18nEngine()->localize(I18n::TXT_KEY_SAFE_MODE_TITLE), I18n::i18nEngine()->localize(I18n::TXT_KEY_SAFE_MODE_DESCRIPTION),
-                                             {
-                                                 OPT_LOAD,
-                                                 OPT_OPEN,
-                                                 OPT_OK,
-                                             });
-
-    box->open()->then([OPT_LOAD, OPT_OK, OPT_OPEN, this](SP<CPromiseResult<std::string>> result) {
-        if (result->hasError())
-            return;
-
-        const auto RES = result->result();
-
-        if (RES.starts_with(OPT_LOAD)) {
-            m_safeMode = false;
-            Config::mgr()->reload();
-        } else if (RES.starts_with(OPT_OPEN)) {
-            std::string reportPath;
-            const auto  HOME       = getenv("HOME");
-            const auto  CACHE_HOME = getenv("XDG_CACHE_HOME");
-
-            if (CACHE_HOME && CACHE_HOME[0] != '\0') {
-                reportPath += CACHE_HOME;
-                reportPath += "/hyprland/";
-            } else if (HOME && HOME[0] != '\0') {
-                reportPath += HOME;
-                reportPath += "/.cache/hyprland/";
-            }
-            Hyprutils::OS::CProcess proc("xdg-open", {reportPath});
-
-            proc.runAsync();
-
-            // reopen
-            openSafeModeBox();
-        }
-    });
 }
 
 void CCompositor::moveWindowToWorkspaceSafe(PHLWINDOW pWindow, PHLWORKSPACE pWorkspace) {

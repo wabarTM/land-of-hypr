@@ -1,5 +1,4 @@
 #include "Shader.hpp"
-#include "../errorOverlay/Overlay.hpp"
 #include "../config/ConfigValue.hpp"
 #include "OpenGL.hpp"
 
@@ -44,8 +43,6 @@ void CShader::logShaderError(const GLuint& shader, bool program, bool silent) {
 
     Log::logger->log(Log::ERR, "Failed to link shader: {}", FULLERROR);
 
-    if (!silent)
-        ErrorOverlay::overlay()->queueError(FULLERROR);
 }
 
 GLuint CShader::compileShader(const GLuint& type, std::string src, bool dynamic, bool silent) {

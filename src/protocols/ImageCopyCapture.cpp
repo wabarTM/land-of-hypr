@@ -1,6 +1,5 @@
 #include "ImageCopyCapture.hpp"
 #include "../managers/screenshare/ScreenshareManager.hpp"
-#include "../managers/permissions/DynamicPermissionManager.hpp"
 #include "../managers/PointerManager.hpp"
 #include "./core/Seat.hpp"
 #include "LinuxDMABUF.hpp"
@@ -309,10 +308,6 @@ void CImageCopyCaptureCursorSession::sendConstraints() {
 }
 
 void CImageCopyCaptureCursorSession::sendCursorEvents() {
-    const auto PERM = g_pDynamicPermissionManager->clientPermissionMode(m_resource->client(), PERMISSION_TYPE_CURSOR_POS);
-    if (PERM != PERMISSION_RULE_ALLOW_MODE_ALLOW)
-        return;
-
     const auto PMONITOR  = m_source->m_monitor.expired() ? m_source->m_window->m_monitor.lock() : m_source->m_monitor.lock();
     CBox       sourceBox = m_source->logicalBox();
     bool       overlaps  = g_pPointerManager->getCursorBoxGlobal().overlaps(sourceBox);
@@ -479,10 +474,6 @@ void CImageCopyCaptureProtocol::bindManager(wl_client* client, void* data, uint3
             pMgr->error(-1, "invalid image capture source");
             return;
         }
-
-        const auto PERM = g_pDynamicPermissionManager->clientPermissionMode(pMgr->client(), PERMISSION_TYPE_CURSOR_POS);
-        if (PERM == PERMISSION_RULE_ALLOW_MODE_DENY)
-            return;
 
         m_cursorSessions.emplace_back(makeShared<CImageCopyCaptureCursorSession>(makeShared<CExtImageCopyCaptureCursorSessionV1>(pMgr->client(), pMgr->version(), id), source,
                                                                                  CWLPointerResource::fromResource(pointer_)));

@@ -98,7 +98,7 @@ void CFocusState::rawWindowFocus(PHLWINDOW pWindow, eFocusReason reason, SP<CWLS
     if (pWindow == m_focusWindow && surface == m_focusSurface)
         return;
 
-    if (!pWindow || !pWindow->priorityFocus()) {
+    if (!pWindow) {
         if (g_pSessionLockManager->isSessionLocked()) {
             Log::logger->log(Log::DEBUG, "Refusing a keyboard focus to a window because of a sessionlock");
             return;

@@ -401,7 +401,6 @@ namespace Desktop::View {
         std::optional<std::string>        xdgTag();
         std::optional<std::string>        xdgDescription();
         PHLWINDOW                         parent();
-        bool                              priorityFocus();
         SP<CWLSurfaceResource>            getSolitaryResource();
         Vector2D                          getReportedSize();
         std::optional<Vector2D>           calculateExpression(const std::string& s);
